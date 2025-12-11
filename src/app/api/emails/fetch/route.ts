@@ -1,8 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import { Order } from '@/types';
+import { Order, ProductType, PRODUCT_CATALOG, ACCESSORY_THRESHOLD } from '@/types';
 
 const COMMISSION_RATE = 0.15;
+
+// Identify product by matching price to known price points
+function identifyProduct(price: number): { type: ProductType; name: string; needsReview: boolean } {
+  // Check against known products with tolerance
+  for (const product of PRODUCT_CATALOG) {
+    const minPrice = product.pricePoint - product.priceTolerance;
+    const maxPrice = product.pricePoint + product.priceTolerance;
+    if (price >= minPrice && price <= maxPrice) {
+      return { type: product.type, name: product.name, needsReview: false };
+    }
+  }
+
+  // Check if it's likely an accessory (low price)
+  if (price > 0 && price < ACCESSORY_THRESHOLD) {
+    return { type: 'accessory', name: 'Accessories/Lids', needsReview: false };
+  }
+
+  // Unknown product - flag for review
+  // Could be a bundle, sale price, or new product
+  return { type: 'unknown', name: 'Unknown Product', needsReview: true };
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -80,13 +101,19 @@ export async function POST(request: NextRequest) {
           const dateHeader = headers.find(h => h.name?.toLowerCase() === 'date');
           const emailDate = dateHeader?.value ? new Date(dateHeader.value).toISOString() : new Date().toISOString();
 
+          // Identify product by price point
+          const productInfo = identifyProduct(price);
+
           orders.push({
             id: message.id!,
             orderId,
             price,
             commission: price * COMMISSION_RATE,
             date: emailDate,
-            emailId: message.id!
+            emailId: message.id!,
+            product: productInfo.type,
+            productName: productInfo.name,
+            needsReview: productInfo.needsReview
           });
         }
       } catch (error) {
