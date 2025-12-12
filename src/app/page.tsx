@@ -48,6 +48,76 @@ import {
   Cell
 } from 'recharts';
 import { format, startOfMonth, startOfWeek, startOfYear, isAfter, isBefore, parseISO, differenceInDays, getDaysInMonth, subDays } from 'date-fns';
+import { Play } from 'lucide-react';
+
+// Generate realistic demo data
+function generateDemoOrders(): Order[] {
+  const demoOrders: Order[] = [];
+  const now = new Date();
+
+  // Product distribution: ~60% Goldie Starter, ~30% Goldie Bundle, ~10% accessories
+  const products = [
+    { type: 'goldie' as ProductType, name: 'Goldie Starter', price: 149, weight: 60 },
+    { type: 'goldie_bundle' as ProductType, name: 'Goldie Bundle', price: 199, weight: 30 },
+    { type: 'accessory' as ProductType, name: 'Replacement Lid', price: 29, weight: 5 },
+    { type: 'accessory' as ProductType, name: 'Bread Lame', price: 24, weight: 5 },
+  ];
+
+  // Generate orders over the past 8 months with realistic patterns
+  // More orders in recent months (growth trend)
+  const monthlyOrderCounts = [8, 10, 12, 15, 18, 22, 25, 28]; // orders per month, growing
+
+  let orderNumber = 43200; // Starting order number
+
+  for (let monthsAgo = 7; monthsAgo >= 0; monthsAgo--) {
+    const orderCount = monthlyOrderCounts[7 - monthsAgo];
+
+    for (let i = 0; i < orderCount; i++) {
+      // Random day within the month
+      const orderDate = new Date(now);
+      orderDate.setMonth(orderDate.getMonth() - monthsAgo);
+      orderDate.setDate(Math.floor(Math.random() * 28) + 1);
+      orderDate.setHours(Math.floor(Math.random() * 12) + 8); // 8am - 8pm
+      orderDate.setMinutes(Math.floor(Math.random() * 60));
+
+      // Skip future dates
+      if (orderDate > now) continue;
+
+      // Weighted random product selection
+      const rand = Math.random() * 100;
+      let cumWeight = 0;
+      let selectedProduct = products[0];
+      for (const product of products) {
+        cumWeight += product.weight;
+        if (rand < cumWeight) {
+          selectedProduct = product;
+          break;
+        }
+      }
+
+      // Slight price variations (shipping, discounts)
+      const priceVariation = (Math.random() - 0.5) * 10;
+      const finalPrice = Math.round(selectedProduct.price + priceVariation);
+
+      demoOrders.push({
+        id: `demo-${orderNumber}`,
+        orderId: `SH${orderNumber}`,
+        price: finalPrice,
+        commission: finalPrice * 0.15,
+        date: orderDate.toISOString(),
+        emailId: `demo-email-${orderNumber}`,
+        product: selectedProduct.type,
+        productName: selectedProduct.name,
+        needsReview: selectedProduct.type === 'unknown' || Math.abs(finalPrice - selectedProduct.price) > 15,
+      });
+
+      orderNumber++;
+    }
+  }
+
+  // Sort by date descending (newest first)
+  return demoOrders.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
 
 // Custom hook for localStorage with SSR safety
 function useLocalStorage<T>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
@@ -118,6 +188,9 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Demo Mode
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   // Feature 1: Date Range Filtering
   const [dateRange, setDateRange] = useState<DateRange>({
@@ -225,6 +298,21 @@ export default function Dashboard() {
     localStorage.removeItem('sourhouse_orders');
     setIsAuthenticated(false);
     setOrders([]);
+    setLastUpdated(null);
+    setIsDemoMode(false);
+  };
+
+  // Demo Mode handlers
+  const handleEnterDemoMode = () => {
+    const demoOrders = generateDemoOrders();
+    setOrders(demoOrders);
+    setIsDemoMode(true);
+    setLastUpdated(new Date().toISOString());
+  };
+
+  const handleExitDemoMode = () => {
+    setOrders([]);
+    setIsDemoMode(false);
     setLastUpdated(null);
   };
 
@@ -673,15 +761,17 @@ export default function Dashboard() {
               </span>
             )}
             
-            {isAuthenticated ? (
+            {isAuthenticated || isDemoMode ? (
               <>
-                <button
-                  onClick={() => setShowPayoutModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-colors font-medium"
-                >
-                  <Wallet className="w-4 h-4" />
-                  Record Payout
-                </button>
+                {!isDemoMode && (
+                  <button
+                    onClick={() => setShowPayoutModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-colors font-medium"
+                  >
+                    <Wallet className="w-4 h-4" />
+                    Record Payout
+                  </button>
+                )}
                 <button
                   onClick={handleExportCSV}
                   disabled={displayedOrders.length === 0}
@@ -690,18 +780,20 @@ export default function Dashboard() {
                   <Download className="w-4 h-4" />
                   Export
                 </button>
-                <button
-                  onClick={handleRefresh}
-                  disabled={isLoading}
-                  className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:bg-amber-800 text-white rounded-lg transition-colors font-medium"
-                >
-                  {isLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4" />
-                  )}
-                  {isLoading ? 'Fetching...' : 'Refresh'}
-                </button>
+                {!isDemoMode && (
+                  <button
+                    onClick={handleRefresh}
+                    disabled={isLoading}
+                    className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:bg-amber-800 text-white rounded-lg transition-colors font-medium"
+                  >
+                    {isLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                    {isLoading ? 'Fetching...' : 'Refresh'}
+                  </button>
+                )}
                 <button
                   onClick={() => setShowSettingsModal(true)}
                   className="flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white transition-colors"
@@ -709,13 +801,23 @@ export default function Dashboard() {
                 >
                   <Settings className="w-4 h-4" />
                 </button>
-                <button
-                  onClick={handleDisconnect}
-                  className="flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white transition-colors"
-                  title="Logout"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
+                {isDemoMode ? (
+                  <button
+                    onClick={handleExitDemoMode}
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors font-medium"
+                  >
+                    <X className="w-4 h-4" />
+                    Exit Demo
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleDisconnect}
+                    className="flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white transition-colors"
+                    title="Logout"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                )}
               </>
             ) : (
               <button
@@ -731,13 +833,36 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
+        {/* Demo Mode Banner */}
+        {isDemoMode && (
+          <div className="mb-6 p-4 bg-blue-900/50 border border-blue-700 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Play className="w-5 h-5 text-blue-400" />
+                <div>
+                  <p className="text-blue-200 font-medium">Demo Mode Active</p>
+                  <p className="text-blue-300/70 text-sm">
+                    You&apos;re viewing sample data. Connect Gmail to see your real commission data.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleConnect}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                Connect Gmail
+              </button>
+            </div>
+          </div>
+        )}
+
         {error && (
           <div className="mb-6 p-4 bg-red-900/50 border border-red-700 rounded-lg text-red-200">
             {error}
           </div>
         )}
 
-        {!isAuthenticated && orders.length === 0 ? (
+        {!isAuthenticated && !isDemoMode && orders.length === 0 ? (
           <div className="text-center py-20">
             <div className="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-6">
               <DollarSign className="w-10 h-10 text-amber-500" />
@@ -746,13 +871,25 @@ export default function Dashboard() {
             <p className="text-gray-400 mb-8 max-w-md mx-auto">
               Connect your Gmail account to automatically track your SourHouse affiliate commissions from Affiliatly notification emails.
             </p>
-            <button
-              onClick={handleConnect}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-colors font-medium text-lg"
-            >
-              <ExternalLink className="w-5 h-5" />
-              Connect Gmail
-            </button>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <button
+                onClick={handleConnect}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-colors font-medium text-lg"
+              >
+                <ExternalLink className="w-5 h-5" />
+                Connect Gmail
+              </button>
+              <button
+                onClick={handleEnterDemoMode}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors font-medium text-lg border border-gray-600"
+              >
+                <Play className="w-5 h-5" />
+                View Demo
+              </button>
+            </div>
+            <p className="text-gray-500 text-sm mt-6">
+              Want to see how it works first? Click &quot;View Demo&quot; to explore with sample data.
+            </p>
           </div>
         ) : (
           <>
