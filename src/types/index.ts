@@ -166,7 +166,7 @@ export const DEFAULT_CATALOG_PRODUCTS: CatalogProduct[] = [
     name: 'Goldie',
     description: 'A warm, safe home for your sourdough starter. Goldie tracks the temperature inside the glass cloche and provides gentle warmth to keep your starter in the "Goldilocks Zone" of 75-82°F. Winner of Good Housekeeping Best Kitchen Gear Award 2024.',
     price: 149,
-    urlSlug: 'products/goldie',
+    urlSlug: 'pages/goldie',
     category: 'main',
     isActive: true,
     addedAt: '2024-01-01T00:00:00.000Z',
