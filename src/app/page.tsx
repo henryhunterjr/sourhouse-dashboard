@@ -4,7 +4,8 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   Order, DashboardStats, MonthlyData, ProductStats, GrowthMetrics, ProductType,
   DateRange, DateRangePreset, OrderReview, CustomProduct, ProductCatalogConfig, Payout,
-  PRODUCT_CATALOG, ACCESSORY_THRESHOLD
+  CatalogProduct, AffiliateSettings, PromoCode,
+  PRODUCT_CATALOG, ACCESSORY_THRESHOLD, DEFAULT_AFFILIATE_SETTINGS, DEFAULT_CATALOG_PRODUCTS
 } from '@/types';
 import {
   RefreshCw,
@@ -31,7 +32,14 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  Copy,
+  Check,
+  Link,
+  Tag,
+  Sparkles,
+  Edit3,
+  ShoppingBag
 } from 'lucide-react';
 import {
   BarChart,
@@ -239,6 +247,22 @@ export default function Dashboard() {
   const [payoutPeriodStart, setPayoutPeriodStart] = useState('');
   const [payoutPeriodEnd, setPayoutPeriodEnd] = useState('');
   const [payoutNotes, setPayoutNotes] = useState('');
+
+  // Feature 8: Affiliate Product Catalog & Toolkit
+  const [affiliateSettings, setAffiliateSettings] = useLocalStorage<AffiliateSettings>(
+    'sourhouse_affiliate_settings',
+    DEFAULT_AFFILIATE_SETTINGS
+  );
+  const [catalogProducts, setCatalogProducts] = useLocalStorage<CatalogProduct[]>(
+    'sourhouse_catalog_products',
+    DEFAULT_CATALOG_PRODUCTS
+  );
+  const [showCatalogModal, setShowCatalogModal] = useState(false);
+  const [showAffiliateSettings, setShowAffiliateSettings] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [editingProduct, setEditingProduct] = useState<CatalogProduct | null>(null);
+  const [newPromoCode, setNewPromoCode] = useState('');
+  const [newPromoDescription, setNewPromoDescription] = useState('');
 
   // Check for tokens on mount
   useEffect(() => {
@@ -739,6 +763,97 @@ export default function Dashboard() {
     setPayoutNotes('');
   }, [payoutAmount, payoutDate, payoutPeriodStart, payoutPeriodEnd, ordersInPayoutPeriod, payoutNotes, setPayouts]);
 
+  // Handler: Copy to clipboard
+  const handleCopy = useCallback((text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  }, []);
+
+  // Handler: Get affiliate link for a product
+  const getAffiliateLink = useCallback((product: CatalogProduct) => {
+    const base = affiliateSettings.baseUrl.replace(/\/$/, '');
+    const refParam = affiliateSettings.refCode ? `?ref=${affiliateSettings.refCode}` : '';
+    return `${base}/${product.urlSlug}${refParam}`;
+  }, [affiliateSettings]);
+
+  // Handler: Update catalog product
+  const handleUpdateCatalogProduct = useCallback((productId: string, updates: Partial<CatalogProduct>) => {
+    setCatalogProducts(prev => prev.map(p =>
+      p.id === productId
+        ? {
+            ...p,
+            ...updates,
+            lastUpdated: new Date().toISOString(),
+            priceHistory: updates.price && updates.price !== p.price
+              ? [...p.priceHistory, { price: updates.price, date: new Date().toISOString() }]
+              : p.priceHistory
+          }
+        : p
+    ));
+  }, [setCatalogProducts]);
+
+  // Handler: Add promo code
+  const handleAddPromoCode = useCallback(() => {
+    if (!newPromoCode.trim()) return;
+    const newCode: PromoCode = {
+      id: `promo-${Date.now()}`,
+      code: newPromoCode.trim().toUpperCase(),
+      description: newPromoDescription.trim() || 'Discount code',
+      isActive: true,
+    };
+    setAffiliateSettings(prev => ({
+      ...prev,
+      promoCodes: [...prev.promoCodes, newCode]
+    }));
+    setNewPromoCode('');
+    setNewPromoDescription('');
+  }, [newPromoCode, newPromoDescription, setAffiliateSettings]);
+
+  // Handler: Remove promo code
+  const handleRemovePromoCode = useCallback((codeId: string) => {
+    setAffiliateSettings(prev => ({
+      ...prev,
+      promoCodes: prev.promoCodes.filter(c => c.id !== codeId)
+    }));
+  }, [setAffiliateSettings]);
+
+  // Handler: Toggle promo code active status
+  const handleTogglePromoCode = useCallback((codeId: string) => {
+    setAffiliateSettings(prev => ({
+      ...prev,
+      promoCodes: prev.promoCodes.map(c =>
+        c.id === codeId ? { ...c, isActive: !c.isActive } : c
+      )
+    }));
+  }, [setAffiliateSettings]);
+
+  // Handler: Add new product to catalog
+  const handleAddCatalogProduct = useCallback(() => {
+    const newProduct: CatalogProduct = {
+      id: `product-${Date.now()}`,
+      name: 'New Product',
+      description: 'Product description',
+      price: 0,
+      urlSlug: 'products/new-product',
+      category: 'accessory',
+      isActive: true,
+      addedAt: new Date().toISOString(),
+      lastUpdated: new Date().toISOString(),
+      priceHistory: [{ price: 0, date: new Date().toISOString() }],
+    };
+    setCatalogProducts(prev => [...prev, newProduct]);
+    setEditingProduct(newProduct);
+  }, [setCatalogProducts]);
+
+  // Handler: Remove product from catalog
+  const handleRemoveCatalogProduct = useCallback((productId: string) => {
+    setCatalogProducts(prev => prev.filter(p => p.id !== productId));
+    if (editingProduct?.id === productId) {
+      setEditingProduct(null);
+    }
+  }, [setCatalogProducts, editingProduct]);
+
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
       {/* Header */}
@@ -794,6 +909,14 @@ export default function Dashboard() {
                     {isLoading ? 'Fetching...' : 'Refresh'}
                   </button>
                 )}
+                <button
+                  onClick={() => setShowCatalogModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors font-medium"
+                  title="Product Catalog & Affiliate Links"
+                >
+                  <ShoppingBag className="w-4 h-4" />
+                  Products
+                </button>
                 <button
                   onClick={() => setShowSettingsModal(true)}
                   className="flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white transition-colors"
@@ -1669,6 +1792,341 @@ export default function Dashboard() {
                 Cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product Catalog Modal */}
+      {showCatalogModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-xl font-semibold text-white flex items-center gap-2">
+                  <ShoppingBag className="w-5 h-5 text-purple-400" />
+                  Product Catalog
+                </h3>
+                <p className="text-sm text-gray-400 mt-1">Copy affiliate links and descriptions for your content</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAffiliateSettings(!showAffiliateSettings)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                    showAffiliateSettings ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-300 hover:text-white'
+                  }`}
+                >
+                  <Settings className="w-4 h-4" />
+                  Settings
+                </button>
+                <button onClick={() => setShowCatalogModal(false)} className="text-gray-400 hover:text-white p-2">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Affiliate Settings Panel */}
+            {showAffiliateSettings && (
+              <div className="mb-6 p-4 bg-gray-800/50 border border-gray-700 rounded-lg space-y-4">
+                <h4 className="text-sm font-medium text-purple-400 uppercase flex items-center gap-2">
+                  <Link className="w-4 h-4" />
+                  Affiliate Settings
+                </h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm text-gray-400 block mb-1">Referral Code</label>
+                    <input
+                      type="text"
+                      value={affiliateSettings.refCode}
+                      onChange={(e) => setAffiliateSettings(prev => ({ ...prev, refCode: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white"
+                      placeholder="BAKINGGREATBREAD"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-400 block mb-1">Commission Rate</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={affiliateSettings.commissionRate * 100}
+                        onChange={(e) => setAffiliateSettings(prev => ({ ...prev, commissionRate: Number(e.target.value) / 100 }))}
+                        className="w-24 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-right"
+                        min="0"
+                        max="100"
+                      />
+                      <span className="text-gray-400">%</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Promo Codes */}
+                <div>
+                  <label className="text-sm text-gray-400 block mb-2">Promo Codes</label>
+                  <div className="space-y-2 mb-3">
+                    {affiliateSettings.promoCodes.map((promo) => (
+                      <div key={promo.id} className="flex items-center gap-3 p-2 bg-gray-700/50 rounded-lg">
+                        <button
+                          onClick={() => handleTogglePromoCode(promo.id)}
+                          className={`w-6 h-6 rounded flex items-center justify-center ${
+                            promo.isActive ? 'bg-green-600' : 'bg-gray-600'
+                          }`}
+                        >
+                          {promo.isActive && <Check className="w-4 h-4 text-white" />}
+                        </button>
+                        <div className="flex-1">
+                          <span className="text-white font-mono font-medium">{promo.code}</span>
+                          <span className="text-gray-400 text-sm ml-2">- {promo.description}</span>
+                        </div>
+                        <button
+                          onClick={() => handleCopy(promo.code, `promo-${promo.id}`)}
+                          className="p-1 text-gray-400 hover:text-white"
+                        >
+                          {copiedId === `promo-${promo.id}` ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                        <button
+                          onClick={() => handleRemovePromoCode(promo.id)}
+                          className="p-1 text-red-400 hover:text-red-300"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newPromoCode}
+                      onChange={(e) => setNewPromoCode(e.target.value)}
+                      className="w-32 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white font-mono"
+                      placeholder="HBK23"
+                    />
+                    <input
+                      type="text"
+                      value={newPromoDescription}
+                      onChange={(e) => setNewPromoDescription(e.target.value)}
+                      className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white"
+                      placeholder="Description (e.g., 15% off)"
+                    />
+                    <button
+                      onClick={handleAddPromoCode}
+                      disabled={!newPromoCode.trim()}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 text-white rounded-lg"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Quick Copy Section - Active Promo Codes */}
+            {affiliateSettings.promoCodes.filter(p => p.isActive).length > 0 && (
+              <div className="mb-6 p-3 bg-amber-900/30 border border-amber-700/50 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Tag className="w-4 h-4 text-amber-400" />
+                    <span className="text-amber-200 text-sm font-medium">Active Promo Codes:</span>
+                    {affiliateSettings.promoCodes.filter(p => p.isActive).map((promo) => (
+                      <button
+                        key={promo.id}
+                        onClick={() => handleCopy(promo.code, `quick-promo-${promo.id}`)}
+                        className="px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded font-mono text-sm flex items-center gap-1"
+                      >
+                        {promo.code}
+                        {copiedId === `quick-promo-${promo.id}` ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Product Cards */}
+            <div className="space-y-4">
+              {catalogProducts.filter(p => p.isActive).map((product) => {
+                const affiliateLink = getAffiliateLink(product);
+                const isEditing = editingProduct?.id === product.id;
+                const isRecent = new Date(product.addedAt) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // Added in last 30 days
+
+                return (
+                  <div key={product.id} className="p-4 bg-gray-800 border border-gray-700 rounded-lg">
+                    {isEditing ? (
+                      // Edit Mode
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="text"
+                            value={editingProduct.name}
+                            onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                            className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white font-medium"
+                            placeholder="Product name"
+                          />
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-400">$</span>
+                            <input
+                              type="number"
+                              value={editingProduct.price}
+                              onChange={(e) => setEditingProduct({ ...editingProduct, price: Number(e.target.value) })}
+                              className="w-24 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-right"
+                            />
+                          </div>
+                        </div>
+                        <textarea
+                          value={editingProduct.description}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
+                          className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white h-24"
+                          placeholder="Product description for your content..."
+                        />
+                        <div className="flex items-center gap-3">
+                          <span className="text-gray-400 text-sm">URL:</span>
+                          <input
+                            type="text"
+                            value={editingProduct.urlSlug}
+                            onChange={(e) => setEditingProduct({ ...editingProduct, urlSlug: e.target.value })}
+                            className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white font-mono text-sm"
+                            placeholder="products/product-slug"
+                          />
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <select
+                            value={editingProduct.category}
+                            onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value as CatalogProduct['category'] })}
+                            className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white"
+                          >
+                            <option value="main">Main Product</option>
+                            <option value="bundle">Bundle</option>
+                            <option value="accessory">Accessory</option>
+                          </select>
+                          <div className="flex-1" />
+                          <button
+                            onClick={() => {
+                              handleUpdateCatalogProduct(product.id, editingProduct);
+                              setEditingProduct(null);
+                            }}
+                            className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditingProduct(null)}
+                            className="px-4 py-2 text-gray-400 hover:text-white"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      // Display Mode
+                      <>
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-lg font-semibold text-white">{product.name}</h4>
+                            {isRecent && (
+                              <span className="px-2 py-0.5 bg-green-600 text-white text-xs rounded-full flex items-center gap-1">
+                                <Sparkles className="w-3 h-3" />
+                                NEW
+                              </span>
+                            )}
+                            <span className={`px-2 py-0.5 text-xs rounded-full ${
+                              product.category === 'main' ? 'bg-amber-600 text-white' :
+                              product.category === 'bundle' ? 'bg-purple-600 text-white' :
+                              'bg-gray-600 text-gray-200'
+                            }`}>
+                              {product.category}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl font-bold text-green-400">${product.price}</span>
+                            <button
+                              onClick={() => setEditingProduct(product)}
+                              className="p-2 text-gray-400 hover:text-white"
+                              title="Edit product"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <p className="text-gray-300 text-sm mb-4 leading-relaxed">{product.description}</p>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            onClick={() => handleCopy(affiliateLink, `link-${product.id}`)}
+                            className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm"
+                          >
+                            {copiedId === `link-${product.id}` ? (
+                              <>
+                                <Check className="w-4 h-4" />
+                                Copied!
+                              </>
+                            ) : (
+                              <>
+                                <Link className="w-4 h-4" />
+                                Copy Affiliate Link
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => handleCopy(product.description, `desc-${product.id}`)}
+                            className="flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm"
+                          >
+                            {copiedId === `desc-${product.id}` ? (
+                              <>
+                                <Check className="w-4 h-4" />
+                                Copied!
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-4 h-4" />
+                                Copy Description
+                              </>
+                            )}
+                          </button>
+                          <a
+                            href={affiliateLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white text-sm"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            View Product
+                          </a>
+                          <span className="text-gray-500 text-xs ml-auto">
+                            Updated {format(parseISO(product.lastUpdated), 'MMM d, yyyy')}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Add Product Button */}
+            <div className="mt-4 pt-4 border-t border-gray-700">
+              <button
+                onClick={handleAddCatalogProduct}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg"
+              >
+                <Plus className="w-4 h-4" />
+                Add Product
+              </button>
+            </div>
+
+            {/* Setup Prompt */}
+            {!affiliateSettings.refCode && (
+              <div className="mt-4 p-4 bg-purple-900/30 border border-purple-700/50 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-purple-200 font-medium">Set up your affiliate code</p>
+                    <p className="text-purple-300/70 text-sm mt-1">
+                      Click Settings above to add your referral code (e.g., BAKINGGREATBREAD) so your affiliate links are ready to use.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
