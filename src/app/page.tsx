@@ -359,7 +359,9 @@ export default function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token
+          refreshToken: tokens.refresh_token,
+          productCatalog: productCatalog,
+          accessoryThreshold: productCatalog.accessoryThreshold
         })
       });
 
@@ -443,6 +445,25 @@ export default function Dashboard() {
       (!reviews[o.orderId] || reviews[o.orderId].status === 'pending')
     );
   }, [filteredByDateOrders, reviews]);
+
+  // Unknown price points - group by price to help user identify missing products
+  const unknownPricePoints = useMemo(() => {
+    const unknownOrders = orders.filter(o => o.product === 'unknown');
+    const priceGroups: Record<number, { count: number; orderIds: string[] }> = {};
+
+    unknownOrders.forEach(o => {
+      const roundedPrice = Math.round(o.price);
+      if (!priceGroups[roundedPrice]) {
+        priceGroups[roundedPrice] = { count: 0, orderIds: [] };
+      }
+      priceGroups[roundedPrice].count++;
+      priceGroups[roundedPrice].orderIds.push(o.orderId);
+    });
+
+    return Object.entries(priceGroups)
+      .map(([price, data]) => ({ price: Number(price), ...data }))
+      .sort((a, b) => b.count - a.count);
+  }, [orders]);
 
   // Calculate stats (using filtered orders)
   const stats: DashboardStats = useMemo(() => {
@@ -1700,8 +1721,52 @@ export default function Dashboard() {
               />
             </div>
 
+            {/* Unknown Price Points Section */}
+            {unknownPricePoints.length > 0 && (
+              <div className="mt-6 pt-6 border-t border-gray-700">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertTriangle className="w-4 h-4 text-amber-400" />
+                  <h4 className="text-sm font-medium text-amber-400 uppercase">
+                    Unknown Price Points ({orders.filter(o => o.product === 'unknown').length} orders)
+                  </h4>
+                </div>
+                <p className="text-xs text-gray-500 mb-3">
+                  These prices aren&apos;t matching any product. Add products above to reduce unknowns.
+                </p>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {unknownPricePoints.map(({ price, count }) => (
+                    <div key={price} className="flex items-center justify-between p-2 bg-gray-800 rounded">
+                      <span className="text-amber-300 font-mono">${price}</span>
+                      <span className="text-gray-400 text-sm">{count} order{count > 1 ? 's' : ''}</span>
+                      <button
+                        onClick={() => {
+                          // Pre-fill and add a new product at this price
+                          const newProduct: CustomProduct = {
+                            id: `custom-${Date.now()}`,
+                            type: price >= productCatalog.accessoryThreshold ? 'goldie_bundle' : 'accessory',
+                            name: `Product at $${price}`,
+                            pricePoint: price,
+                            priceTolerance: 10,
+                            isCustom: true,
+                            createdAt: new Date().toISOString()
+                          };
+                          setProductCatalog(prev => ({
+                            ...prev,
+                            products: [...prev.products, newProduct]
+                          }));
+                        }}
+                        className="text-xs px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded"
+                      >
+                        Add Product
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <p className="mt-4 text-xs text-gray-500">
-              Note: Changes are saved automatically. Product catalog is used for new orders only.
+              Note: Changes are saved automatically. Re-fetch emails to re-categorize orders with updated catalog.
             </p>
           </div>
         </div>

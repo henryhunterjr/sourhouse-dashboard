@@ -1,13 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import { Order, ProductType, PRODUCT_CATALOG, ACCESSORY_THRESHOLD } from '@/types';
+import { Order, ProductType, Product, PRODUCT_CATALOG, ACCESSORY_THRESHOLD } from '@/types';
 
 const COMMISSION_RATE = 0.15;
 
+// Product catalog item from client (may have different structure)
+interface ClientProduct {
+  type: ProductType;
+  name: string;
+  pricePoint: number;
+  priceTolerance: number;
+}
+
 // Identify product by matching price to known price points
-function identifyProduct(price: number): { type: ProductType; name: string; needsReview: boolean } {
+function identifyProduct(
+  price: number,
+  customCatalog?: ClientProduct[],
+  accessoryThreshold: number = ACCESSORY_THRESHOLD
+): { type: ProductType; name: string; needsReview: boolean } {
+  // Use custom catalog if provided, otherwise fall back to default
+  const catalog = customCatalog && customCatalog.length > 0 ? customCatalog : PRODUCT_CATALOG;
+
   // Check against known products with tolerance
-  for (const product of PRODUCT_CATALOG) {
+  for (const product of catalog) {
     const minPrice = product.pricePoint - product.priceTolerance;
     const maxPrice = product.pricePoint + product.priceTolerance;
     if (price >= minPrice && price <= maxPrice) {
@@ -16,7 +31,7 @@ function identifyProduct(price: number): { type: ProductType; name: string; need
   }
 
   // Check if it's likely an accessory (low price)
-  if (price > 0 && price < ACCESSORY_THRESHOLD) {
+  if (price > 0 && price < accessoryThreshold) {
     return { type: 'accessory', name: 'Accessories/Lids', needsReview: false };
   }
 
@@ -27,11 +42,20 @@ function identifyProduct(price: number): { type: ProductType; name: string; need
 
 export async function POST(request: NextRequest) {
   try {
-    const { accessToken, refreshToken } = await request.json();
-    
+    const { accessToken, refreshToken, productCatalog, accessoryThreshold } = await request.json();
+
     if (!accessToken) {
       return NextResponse.json({ error: 'No access token provided' }, { status: 401 });
     }
+
+    // Extract custom catalog from client's productCatalog if provided
+    const customCatalog: ClientProduct[] | undefined = productCatalog?.products?.map((p: ClientProduct) => ({
+      type: p.type,
+      name: p.name,
+      pricePoint: p.pricePoint,
+      priceTolerance: p.priceTolerance
+    }));
+    const threshold = accessoryThreshold || ACCESSORY_THRESHOLD;
 
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
@@ -101,8 +125,8 @@ export async function POST(request: NextRequest) {
           const dateHeader = headers.find(h => h.name?.toLowerCase() === 'date');
           const emailDate = dateHeader?.value ? new Date(dateHeader.value).toISOString() : new Date().toISOString();
 
-          // Identify product by price point
-          const productInfo = identifyProduct(price);
+          // Identify product by price point (use custom catalog if provided)
+          const productInfo = identifyProduct(price, customCatalog, threshold);
 
           orders.push({
             id: message.id!,

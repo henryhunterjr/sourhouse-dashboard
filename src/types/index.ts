@@ -9,8 +9,14 @@ export interface Product {
 }
 
 export const PRODUCT_CATALOG: Product[] = [
-  { type: 'goldie', name: 'Goldie Starter', pricePoint: 149, priceTolerance: 10 },
-  { type: 'goldie_bundle', name: 'Goldie Bundle', pricePoint: 199, priceTolerance: 15 },
+  { type: 'goldie', name: 'Goldie Starter', pricePoint: 149, priceTolerance: 15 },
+  { type: 'goldie_bundle', name: 'Goldie + Cooling Puck', pricePoint: 199, priceTolerance: 20 },
+  { type: 'goldie_bundle', name: 'Big Bundle', pricePoint: 259, priceTolerance: 25 },
+  { type: 'goldie_bundle', name: 'Holiday Bundle', pricePoint: 279, priceTolerance: 25 },
+  { type: 'accessory', name: 'Starter Jars', pricePoint: 29, priceTolerance: 10 },
+  { type: 'accessory', name: 'Jar Bundle', pricePoint: 49, priceTolerance: 10 },
+  { type: 'accessory', name: 'Cooling Puck', pricePoint: 59, priceTolerance: 10 },
+  { type: 'accessory', name: 'Bread Blanket', pricePoint: 39, priceTolerance: 10 },
 ];
 
 export const ACCESSORY_THRESHOLD = 100; // Orders below this are likely accessories
