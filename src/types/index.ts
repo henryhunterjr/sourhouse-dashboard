@@ -1,115 +1,118 @@
-// Product catalog with price points for identification
-export type ProductType = 'goldie' | 'goldie_bundle' | 'accessory' | 'unknown';
+// Game Types for The Great Bread Showdown
 
-export interface Product {
-  type: ProductType;
-  name: string;
-  pricePoint: number;
-  priceTolerance: number; // Allow small variations (shipping, discounts)
+export type Tier = 'Fresh from the Oven' | 'Crusty Veteran' | 'Master Baker';
+export type GameMode = 'classic' | 'practice' | 'daily';
+export type Category = 'Terminology' | 'Techniques' | 'Science' | 'Troubleshooting' | 'Equipment' | 'Ingredients' | 'History & Culture';
+
+export interface Question {
+  id: string;
+  tier: Tier;
+  question: string;
+  options: string[];
+  correct: number;
+  explanation: string;
+  category: Category;
+  learnMoreTerm?: string;
+  learnMoreUrl?: string;
+  blogUrl?: string;
 }
 
-export const PRODUCT_CATALOG: Product[] = [
-  { type: 'goldie', name: 'Goldie Starter', pricePoint: 149, priceTolerance: 10 },
-  { type: 'goldie_bundle', name: 'Goldie Bundle', pricePoint: 199, priceTolerance: 15 },
-];
+export interface GameState {
+  mode: GameMode;
+  tier: Tier;
+  questionIndex: number;
+  score: number;
+  streak: number;
+  bestStreak: number;
+  answers: boolean[];
+  questionsUsed: string[];
+  timeRemaining?: number;
+  isPaused: boolean;
+  isComplete: boolean;
+  currentQuestionStartTime?: number;
+}
 
-export const ACCESSORY_THRESHOLD = 100; // Orders below this are likely accessories
-
-export interface Order {
-  id: string;
-  orderId: string;
-  price: number;
-  commission: number;
+export interface GameResult {
+  mode: GameMode;
+  tier: Tier;
+  score: number;
+  maxScore: number;
+  correct: number;
+  total: number;
+  bestStreak: number;
+  timeBonuses: number;
+  missedQuestions: {
+    question: Question;
+    userAnswer: number;
+  }[];
+  newBadges: string[];
   date: string;
-  emailId: string;
-  // Product identification
-  product: ProductType;
-  productName: string;
-  needsReview: boolean; // Flag for manual review if price doesn't match known products
 }
 
-export interface DashboardStats {
-  totalCommission: number;
-  totalOrders: number;
-  thisMonthCommission: number;
-  thisMonthOrders: number;
-  thisWeekCommission: number;
-  thisWeekOrders: number;
-  averageOrderValue: number;
-}
+export type BadgeId =
+  | 'first_loaf'
+  | 'speed_demon'
+  | 'perfectionist'
+  | 'triple_threat'
+  | 'knowledge_hungry'
+  | 'streak_master'
+  | 'daily_baker'
+  | 'early_riser'
+  | 'star_baker';
 
-export interface MonthlyData {
-  month: string;
-  commission: number;
-  orders: number;
-  revenue: number;
-}
-
-// Product performance analytics
-export interface ProductStats {
-  type: ProductType;
+export interface Badge {
+  id: BadgeId;
   name: string;
-  totalOrders: number;
-  totalRevenue: number;
-  totalCommission: number;
-  percentOfOrders: number;
-  percentOfRevenue: number;
+  description: string;
+  icon: string;
 }
 
-// Growth and trend analytics
-export interface GrowthMetrics {
-  monthOverMonth: number; // Percentage change from last month
-  averageMonthlyCommission: number;
-  projectedMonthlyDeposit: number; // Based on current month pace
-  bestMonth: { month: string; commission: number };
-  trend: 'growing' | 'stable' | 'declining';
-  ordersPerWeekAvg: number;
+export interface PlayerStats {
+  highScores: {
+    'Fresh from the Oven': number;
+    'Crusty Veteran': number;
+    'Master Baker': number;
+  };
+  dailyScore: number;
+  dailyLastPlayed: string | null;
+  dailyStreak: number;
+  badges: BadgeId[];
+  totalGames: number;
+  totalCorrect: number;
+  totalQuestions: number;
+  learnMoreClicks: number;
+  challengesSent: number;
+  challengesWon: number;
 }
 
-// For flagged orders that need manual review
-export interface ReviewableOrder extends Order {
-  reviewReason: string;
+export interface DailyChallenge {
+  date: string;
+  questionIds: string[];
+  completed: boolean;
+  score: number;
 }
 
-// ============ DATE RANGE FILTERING ============
-export type DateRangePreset = 'this_month' | 'last_30_days' | 'last_90_days' | 'ytd' | 'all_time' | 'custom';
-
-export interface DateRange {
-  preset: DateRangePreset;
-  startDate: string | null;  // ISO string
-  endDate: string | null;    // ISO string
+export interface ChallengeData {
+  tier: Tier;
+  score: number;
+  name: string;
+  date: string;
 }
 
-// ============ MANUAL REVIEW WORKFLOW ============
-export interface OrderReview {
-  orderId: string;
-  status: 'pending' | 'approved' | 'dismissed';
-  assignedProduct: ProductType | null;
-  notes: string;
-  reviewedAt: string | null;
-}
+// Timer settings by tier (in seconds)
+export const TIMER_SETTINGS: Record<Tier, number> = {
+  'Fresh from the Oven': 30,
+  'Crusty Veteran': 20,
+  'Master Baker': 15,
+};
 
-// ============ DYNAMIC PRODUCT CATALOG ============
-export interface CustomProduct extends Product {
-  id: string;
-  isCustom: boolean;
-  createdAt: string;
-}
+// Score multipliers based on time remaining
+export const SCORE_MULTIPLIERS = {
+  FAST: 3,    // First third of time
+  MEDIUM: 2,  // Middle third
+  SLOW: 1,    // Final third
+};
 
-export interface ProductCatalogConfig {
-  products: CustomProduct[];
-  accessoryThreshold: number;
-}
-
-// ============ PAYOUT TRACKING ============
-export type PayoutStatus = 'pending' | 'paid';
-
-export interface Payout {
-  id: string;
-  amount: number;
-  date: string;              // ISO string (payout date)
-  periodStart: string;       // Orders from this date
-  periodEnd: string;         // Orders to this date
-  orderIds: string[];        // Order IDs included
-  notes: string;
-}
+export const BASE_POINTS = 100;
+export const QUESTIONS_PER_GAME = 10;
+export const DAILY_QUESTIONS = 5;
