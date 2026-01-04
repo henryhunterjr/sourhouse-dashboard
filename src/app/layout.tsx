@@ -2,8 +2,13 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SourHouse Commission Tracker | HBK23",
-  description: "Track your SourHouse affiliate commissions for Baking Great Bread at Home",
+  title: "The Great Bread Showdown | Test Your Baking Knowledge",
+  description: "A fun quiz game for bread bakers. Test your knowledge across three difficulty levels!",
+  openGraph: {
+    title: "The Great Bread Showdown",
+    description: "Test your bread baking knowledge!",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
@@ -13,7 +18,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased">
+      <body className="antialiased min-h-screen">
         {children}
       </body>
     </html>
